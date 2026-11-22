@@ -117,4 +117,37 @@ public class Util {
             );
         }
     }
+
+    /**
+     * Runs the given code on a separate thread that has a large (8 MB) stack
+     * and returns whatever it threw. Tests that guard against unbounded
+     * recursion use this so that the outcome does not depend on the stack size
+     * of the test runner thread, which may be run with a small stack (for
+     * example -Xss512k): without a recursion limit, deeply nested input still
+     * ends in a StackOverflowError, and with the limit in place the expected
+     * exception is raised well before the stack is exhausted.
+     * @param body the code to run
+     * @return the Throwable thrown by the code, or null if it completed normally
+     */
+    public static Throwable throwableFromLargeStack(final Runnable body) {
+        final Throwable[] thrown = new Throwable[1];
+        Thread thread = new Thread(null, new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    body.run();
+                } catch (Throwable t) {
+                    thrown[0] = t;
+                }
+            }
+        }, "large-stack-test", 8L * 1024 * 1024);
+        thread.start();
+        try {
+            thread.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for the test thread", e);
+        }
+        return thrown[0];
+    }
 }
